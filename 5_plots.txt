@@ -1,0 +1,38 @@
+library(tidyverse)
+
+data <- read.table("all.results.txt", header = T)
+data <- filter(data, WT1.start > 1 & WT2.start > 1 & WT3.start > 1 & WT4.start > 1)
+
+plot <- select(data, Chr, Pos, pval) %>% 
+  mutate(Chr = factor(Chr, levels = c(1:19, "X", "Y", "MT"))) %>%
+  group_by(Chr) %>%
+  summarise(len = max(Pos)) %>% 
+  mutate(tot=cumsum(as.numeric(len))-len) %>% 
+  select(-len) %>%
+  left_join(data, ., by=c("Chr"="Chr")) %>% 
+  mutate(Chr = factor(Chr, levels = c(1:19, "X", "Y", "MT"))) %>%
+  arrange(Chr, Pos) %>%
+  mutate(Pos_cum=Pos+tot) %>% 
+  mutate(is_highlight = ifelse(pval < 0.05/nrow(data), "yes", "no")) 
+
+
+ggplot(plot, aes(x = Pos_cum, y = -log10(pval))) +
+  geom_point(aes(color=Chr), size=0.5, shape = 16) +
+  geom_point(data=subset(plot, is_highlight=="yes"), color="red", size=0.75, shape = 16) +
+  geom_hline(yintercept = -log10(0.05/nrow(plot)), linetype = "dashed") +
+  scale_color_manual(values = rep(c("grey", "skyblue"), 22)) +
+  scale_x_continuous(label = unique(plot$Chr),
+                     breaks= group_by(plot, Chr) %>% 
+                       summarize(center=(max(Pos_cum) + min(Pos_cum) ) / 2 ) %>%
+                       mutate(Chr = factor(Chr, levels = c(1:19, "X", "Y", "MT"))) %>%
+                       arrange(Chr) %>%
+                       pull(center),
+                     name = "Chromosome",
+                     expand = expansion(mult = c(0.01,0.01))) +
+  scale_y_continuous(breaks = seq(0,10,2),
+                     expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        legend.position = "none")
+
+ggsave("Manhattan.pdf", width = 6, height = 2, units = "in")  

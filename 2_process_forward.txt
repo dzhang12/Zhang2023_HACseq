@@ -1,0 +1,29 @@
+mkdir bam
+for i in {1..7}; do sample=`cat samplenames.txt | awk "NR==$i"`; samtools view -f 0 -F 16 -h -b /project/shongjunlab/FZ/Alignment25/*$sample*/Aligned.sortedByCoord.out.bam > bam/$sample.f.bam; done
+
+mkdir bed
+for i in {1..7}; do sample=`cat samplenames.txt | awk "NR==$i"`; ~/bedtools bamtobed -i bam/$sample.f.bam > bed/$sample.f.bed; done
+
+for i in {1..7}; do sample=`cat samplenames.txt | awk "NR==$i"`; cut -d$'\t' -f2 bed/$sample.f.bed | awk '{print $1+1}' - > fend.txt; cut -d$'\t' -f1,2 bed/$sample.f.bed | paste -d '\t' - fend.txt > bed/$sample.f.start.bed; done
+
+cat bed/*.f.start.bed | sort -k1,1 -k2,2n - | ~/bedtools merge -d -1 -i - > bed/all.f.start.bed
+ 
+~/bedtools intersect -wa -a bed/all.f.start.bed -b fgenes.bed > bed/all.f.start.genes.bed
+
+~/bedtools shift -i bed/all.f.start.genes.bed -g GRCm38.p6.genome.fa.fai -s -1 | ~/bedtools getfasta -bedOut -fi GRCm38.p6.genome.fa -bed - | cut -d $'\t' -f4 | paste -d '\t' bed/all.f.start.genes.bed - | grep "C" | cut -d $'\t' -f1,2,3 > bed/all.f.start.genes.onlyC.bed 
+
+mkdir coverage
+for i in {1..7}; do sample=`cat samplenames.txt | awk "NR==$i"`; ~/bedtools coverage -counts -a bed/all.f.start.genes.onlyC.bed -b bed/$sample.f.start.bed > coverage/$sample.f.start.coverage.txt; done
+
+for i in {1..7}; do sample=`cat samplenames.txt | awk "NR==$i"`; ~/bedtools coverage -counts -split -a bed/all.f.start.genes.onlyC.bed -b bam/$sample.f.bam > coverage/$sample.f.coverage.txt; done
+
+for i in {1..7}; do sample=`cat samplenames.txt | awk "NR==$i"`; cut -d$'\t' -f4 coverage/$sample.f.start.coverage.txt > coverage/$sample.f.start; cut -d$'\t' -f4 coverage/$sample.f.coverage.txt > coverage/$sample.f; done
+
+paste -d '\t' bed/all.f.start.genes.onlyC.bed coverage/WT1.f.start coverage/WT2.f.start coverage/WT3.f.start coverage/WT4.f.start coverage/KO3.f.start coverage/KO4.f.start coverage/KO5.f.start coverage/WT1.f coverage/WT2.f coverage/WT3.f coverage/WT4.f coverage/KO3.f coverage/KO4.f coverage/KO5.f > all.f.coverage.txt
+
+echo Chr$'\t'Start$'\t'End$'\t'WT1.start$'\t'WT2.start$'\t'WT3.start$'\t'WT4.start$'\t'KO3.start$'\t'KO4.start$'\t'KO5.start$'\t'WT1$'\t'WT2$'\t'WT3$'\t'WT4$'\t'KO3$'\t'KO4$'\t'KO5 > header.txt
+sed -i "1s/^/`cat header.txt`\n/" all.f.coverage.txt
+
+time cat all.f.coverage.txt | cut -d$'\t' -f10-17 | sed 's/\t/./g' | grep -n -o "\.0" | sort -n | uniq -c | cut -d : -f 1 | sed 's/^ *//g' > all.f.coverage.quant.txt
+
+cut -d ' ' -f 1 all.f.coverage.quant.txt | sort | uniq -c
